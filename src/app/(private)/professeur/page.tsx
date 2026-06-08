@@ -148,7 +148,7 @@ export default function DashboardPage() {
             </h3>
           </div>
 
-          <form onSubmit={handleCorrect} className="space-y-5">
+          <form onSubmit={handleCorrect} className="space-y-5" noValidate>
             {/* Modèle */}
             <div>
               <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">
@@ -226,7 +226,6 @@ export default function DashboardPage() {
                     accept="application/pdf,image/*"
                     onChange={(e) => setCopieFile(e.target.files?.[0] || null)}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    required
                   />
                   <Upload className="h-5 w-5 mx-auto text-indigo-400/80 mb-2" />
                   <span className="text-xs text-indigo-300 block truncate font-medium">
