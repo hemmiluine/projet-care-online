@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
 from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from google import genai
@@ -6,26 +6,82 @@ import json
 import tempfile
 import os
 import re
-from typing import Optional
+from typing import Optional, List
+
+from sqlalchemy import create_engine, Column, Integer, String, Float
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, Session
+from pydantic import BaseModel
 
 from outils import purifier_latex_integral, compiler_en_pdf, indexer_bo_fichiers
 from vision_socratique import traiter_document_gemini, generer_remediation_socratique_pdf
 
+# SQLite / SQLAlchemy Setup
+DATABASE_URL = "sqlite:///./classes.db"
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+class DBClass(Base):
+    __tablename__ = "classes"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True, nullable=False)
+    description = Column(String, nullable=True)
+    students_count = Column(Integer, default=0)
+    average_grade = Column(Float, nullable=True)
+    presence_rate = Column(Float, default=100.0)
+
+# Create tables
+Base.metadata.create_all(bind=engine)
+
+# Pydantic schemas
+class ClassBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    students_count: int = 0
+    average_grade: Optional[float] = None
+    presence_rate: float = 100.0
+
+class ClassCreate(ClassBase):
+    pass
+
+class ClassUpdate(ClassBase):
+    pass
+
+class ClassResponse(ClassBase):
+    id: int
+    class Config:
+        from_attributes = True
+
+# DB Dependency
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 app = FastAPI(title="Care Online Science Correction API", version="1.0.0")
 
-# Setup CORS for development
+# Setup CORS for production and development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://care-online.fr",
+        "https://www.care-online.fr",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# API client initialization helper
-def get_gemini_client(api_key: str):
+# API client initialization helper — reads key from environment variable
+def get_gemini_client():
+    api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
-        raise HTTPException(status_code=400, detail="Clé API Gemini (GEMINI_API_KEY) manquante.")
+        raise HTTPException(status_code=500, detail="Clé API Gemini introuvable. Veuillez définir la variable d'environnement GEMINI_API_KEY sur le serveur.")
     try:
         return genai.Client(api_key=api_key)
     except Exception as e:
@@ -33,7 +89,6 @@ def get_gemini_client(api_key: str):
 
 @app.post("/api/correct")
 async def correct_copy(
-    gemini_api_key: str = Form(...),
     model_name: str = Form("gemini-1.5-flash"),
     nom_eleve: Optional[str] = Form(None),
     sujet_file: Optional[UploadFile] = File(None),
@@ -42,8 +97,9 @@ async def correct_copy(
 ):
     """
     Reçoit le sujet, le barème et la copie de l'élève, appelle Gemini et compile la correction en PDF.
+    La clé API Gemini est lue depuis la variable d'environnement GEMINI_API_KEY.
     """
-    client = get_gemini_client(gemini_api_key)
+    client = get_gemini_client()
     
     # Déterminer le nom de l'élève à partir du fichier s'il n'est pas fourni
     if not nom_eleve:
@@ -135,7 +191,6 @@ async def correct_copy(
 
 @app.post("/api/generate-subject")
 async def generate_subject(
-    gemini_api_key: str = Form(...),
     model_name: str = Form("gemini-1.5-flash"),
     niveau: str = Form("seconde"),
     duree: str = Form("1 heure"),
@@ -148,8 +203,9 @@ async def generate_subject(
 ):
     """
     Génère un sujet d'examen ou TP au format LaTeX purifié et compile en PDF.
+    La clé API Gemini est lue depuis la variable d'environnement GEMINI_API_KEY.
     """
-    client = get_gemini_client(gemini_api_key)
+    client = get_gemini_client()
     
     consigne_difficulte = "ATTENTION MODE EXPERT : Le sujet doit être très dense et transversal." if difficulte == "Expert" else ("MODE APPROFONDI : Inclus un exercice d'extraction de données graphique." if difficulte == "Approfondi" else "MODE STANDARD : Exercices très guidés.")
     consignes_specifiques = []
@@ -204,6 +260,58 @@ async def generate_subject(
             "success": False,
             "detail": f"Erreur de génération : {str(e)}"
         })
+
+# CRUD Endpoints for Classes
+@app.get("/api/classes", response_model=List[ClassResponse])
+def read_classes(db: Session = Depends(get_db)):
+    return db.query(DBClass).all()
+
+@app.post("/api/classes", response_model=ClassResponse)
+def create_class(class_data: ClassCreate, db: Session = Depends(get_db)):
+    db_class = DBClass(**class_data.dict())
+    db.add(db_class)
+    db.commit()
+    db.refresh(db_class)
+    return db_class
+
+@app.put("/api/classes/{class_id}", response_model=ClassResponse)
+def update_class(class_id: int, class_data: ClassUpdate, db: Session = Depends(get_db)):
+    db_class = db.query(DBClass).filter(DBClass.id == class_id).first()
+    if not db_class:
+        raise HTTPException(status_code=404, detail="Classe introuvable")
+    
+    for key, value in class_data.dict().items():
+        setattr(db_class, key, value)
+        
+    db.commit()
+    db.refresh(db_class)
+    return db_class
+
+@app.delete("/api/classes/{class_id}")
+def delete_class(class_id: int, db: Session = Depends(get_db)):
+    db_class = db.query(DBClass).filter(DBClass.id == class_id).first()
+    if not db_class:
+        raise HTTPException(status_code=404, detail="Classe introuvable")
+    
+    db.delete(db_class)
+    db.commit()
+    return {"success": True, "detail": "Classe supprimée avec succès"}
+
+@app.on_event("startup")
+def startup_populate_db():
+    db = SessionLocal()
+    try:
+        if db.query(DBClass).count() == 0:
+            mock_classes = [
+                DBClass(name="Terminale S1", description="Mathématiques Spécialité", students_count=28, average_grade=14.2, presence_rate=98.2),
+                DBClass(name="Seconde B", description="Mathématiques Générales", students_count=32, average_grade=12.8, presence_rate=95.5),
+                DBClass(name="Première A", description="Sciences de l'Ingénieur", students_count=18, average_grade=15.1, presence_rate=97.0),
+                DBClass(name="Terminale S2", description="Soutien Mathématiques", students_count=14, average_grade=11.5, presence_rate=94.8),
+            ]
+            db.bulk_save_objects(mock_classes)
+            db.commit()
+    finally:
+        db.close()
 
 if __name__ == "__main__":
     import uvicorn

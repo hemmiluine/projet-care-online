@@ -1,0 +1,18 @@
+# Environment
+.venv/
+__pycache__/
+*.pyc
+
+# Local PDFs and logs from compilation
+doc_temp*
+*.pdf
+*.log
+*.aux
+*.out
+
+# VSCode or system files
+.DS_Store
+.vscode/
+
+# Local databases
+*.db
