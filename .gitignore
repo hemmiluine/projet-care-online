@@ -39,3 +39,17 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# python virtual environment
+/backend-python/.venv/
+/backend-python/__pycache__/
+*.pyc
+
+# Local SQLite / custom JSON db
+/src/lib/db.json
+
+# PDF compilation files
+/backend-python/*.pdf
+/backend-python/*.log
+/backend-python/*.aux
+/backend-python/*.out

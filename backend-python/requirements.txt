@@ -1,0 +1,7 @@
+streamlit
+google-genai
+Pillow
+gspread
+fastapi
+uvicorn
+python-multipart
