@@ -6,19 +6,13 @@ import {
   Users, 
   GraduationCap, 
   CheckSquare, 
-  Clock, 
-  ArrowUpRight, 
-  Calendar, 
-  BookOpen, 
-  TrendingUp, 
-  AlertCircle,
+  TrendingUp,
   Bell,
   Upload,
   FileText,
   Brain,
   Download,
   AlertTriangle,
-  Key,
   Play
 } from "lucide-react";
 
@@ -26,7 +20,6 @@ export default function DashboardPage() {
   const { user } = useAuth();
   
   // API States
-  const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("gemini-1.5-flash");
   const [nomEleve, setNomEleve] = useState("");
   const [sujetFile, setSujetFile] = useState<File | null>(null);
@@ -50,17 +43,12 @@ export default function DashboardPage() {
       setError("Veuillez sélectionner au moins le scan de la copie de l'élève.");
       return;
     }
-    if (!apiKey) {
-      setError("Veuillez renseigner votre clé API Gemini.");
-      return;
-    }
 
     setLoading(true);
     setError(null);
     setResult(null);
 
     const formData = new FormData();
-    formData.append("gemini_api_key", apiKey);
     formData.append("model_name", model);
     if (nomEleve) formData.append("nom_eleve", nomEleve);
     if (sujetFile) formData.append("sujet_file", sujetFile);
@@ -161,34 +149,19 @@ export default function DashboardPage() {
           </div>
 
           <form onSubmit={handleCorrect} className="space-y-5">
-            {/* Clé API et Modèle */}
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider flex items-center gap-1.5">
-                  <Key className="h-3 w-3 text-indigo-400" /> Clé API Gemini
-                </label>
-                <input
-                  type="password"
-                  placeholder="AIzaSy..."
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">
-                  Modèle Actif
-                </label>
-                <select
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-200 focus:outline-none focus:border-indigo-500/50"
-                >
-                  <option value="gemini-1.5-flash">gemini-1.5-flash (Rapide &amp; Éco)</option>
-                  <option value="gemini-1.5-pro">gemini-1.5-pro (Raisonnement avancé)</option>
-                </select>
-              </div>
+            {/* Modèle */}
+            <div>
+              <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">
+                Modèle Actif
+              </label>
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-200 focus:outline-none focus:border-indigo-500/50"
+              >
+                <option value="gemini-1.5-flash">gemini-1.5-flash (Rapide &amp; Éco)</option>
+                <option value="gemini-1.5-pro">gemini-1.5-pro (Raisonnement avancé)</option>
+              </select>
             </div>
 
             {/* Nom de l'élève */}
