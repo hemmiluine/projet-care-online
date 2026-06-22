@@ -34,7 +34,7 @@ export default function ClassesPage() {
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.care-online.fr";
 
   const fetchClasses = async () => {
     setLoading(true);

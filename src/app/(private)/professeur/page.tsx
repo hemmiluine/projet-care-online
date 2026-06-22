@@ -109,7 +109,7 @@ const RESOURCE_TYPE_META: Record<
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://api.care-online.fr";
 
 function getInitials(email: string) {
   const parts = email.split("@")[0].split(/[._-]/);
