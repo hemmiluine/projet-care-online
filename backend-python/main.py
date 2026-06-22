@@ -315,10 +315,12 @@ async def generate_subject(
 # CRUD Endpoints — Classes
 # ---------------------------------------------------------------------------
 @app.get("/api/classes", response_model=List[ClassResponse])
+@app.get("/api/classes/", response_model=List[ClassResponse])
 def read_classes(db: Session = Depends(get_db)):
     return db.query(DBClass).all()
 
 @app.post("/api/classes", response_model=ClassResponse)
+@app.post("/api/classes/", response_model=ClassResponse)
 def create_class(class_data: ClassCreate, db: Session = Depends(get_db)):
     db_class = DBClass(**class_data.dict())
     db.add(db_class)
@@ -351,6 +353,7 @@ def delete_class(class_id: int, db: Session = Depends(get_db)):
 # All endpoints are accessible to any authenticated user.
 # ---------------------------------------------------------------------------
 @app.get("/api/resources", response_model=List[ResourceResponse])
+@app.get("/api/resources/", response_model=List[ResourceResponse])
 def list_resources(
     school_type: Optional[str] = None,
     grade_level: Optional[str] = None,
@@ -374,6 +377,7 @@ def list_resources(
     return query.order_by(DBResource.created_at.desc()).all()
 
 @app.post("/api/resources", response_model=ResourceResponse, status_code=201)
+@app.post("/api/resources/", response_model=ResourceResponse, status_code=201)
 def create_resource(resource_data: ResourceCreate, db: Session = Depends(get_db)):
     """Create a new resource in the collaborative hub."""
     db_resource = DBResource(**resource_data.dict())
