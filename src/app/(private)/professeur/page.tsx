@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Maximize2,
   Trash2,
+  UploadCloud,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -211,18 +212,49 @@ function CreateResourceModal({
   const [resourceType, setResourceType] = useState<ResourceType>("pdf");
   const [subject, setSubject] = useState<SubjectType>("Mathematiques");
   const [contentUrl, setContentUrl] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !contentUrl.trim()) {
-      setError("Le titre et l'URL sont obligatoires.");
+    if (!title.trim()) {
+      setError("Le titre est obligatoire.");
       return;
     }
+
+    const needsFileUpload = ["pdf", "html_custom"].includes(resourceType);
+    if (needsFileUpload && !file) {
+      setError("Veuillez sélectionner ou déposer un fichier.");
+      return;
+    }
+    if (!needsFileUpload && !contentUrl.trim()) {
+      setError("L'URL est obligatoire.");
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
     try {
+      let finalUrl = contentUrl.trim();
+
+      // Upload file to Vercel Blob if needed
+      if (needsFileUpload && file) {
+        const formData = new FormData();
+        formData.append("file", file);
+        const uploadRes = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
+        if (!uploadRes.ok) {
+          const errData = await uploadRes.json();
+          throw new Error(errData.error || "Erreur lors du téléversement vers Vercel Blob.");
+        }
+        const blobData = await uploadRes.json();
+        finalUrl = blobData.url;
+      }
+
       const res = await fetch(`${API_BASE}/api/resources`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -232,7 +264,7 @@ function CreateResourceModal({
           grade_level: gradeLevel,
           resource_type: resourceType,
           subject: subject,
-          content_url: contentUrl.trim(),
+          content_url: finalUrl,
           created_by: userEmail,
         }),
       });
@@ -247,6 +279,19 @@ function CreateResourceModal({
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleFileSelect = (selectedFile: File) => {
+    setError(null);
+    const isValidPDF = resourceType === "pdf" && selectedFile.name.endsWith(".pdf");
+    const isValidHTML = resourceType === "html_custom" && (selectedFile.name.endsWith(".html") || selectedFile.name.endsWith(".zip"));
+    
+    if (!isValidPDF && !isValidHTML) {
+      setError(resourceType === "pdf" ? "Veuillez fournir un fichier .pdf valide." : "Veuillez fournir un fichier .html ou .zip valide.");
+      setFile(null);
+      return;
+    }
+    setFile(selectedFile);
   };
 
   return (
@@ -343,20 +388,72 @@ function CreateResourceModal({
             </select>
           </div>
 
-          {/* URL */}
-          <div>
-            <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">
-              URL / Chemin *
-            </label>
-            <input
-              id="resource-url"
-              type="url"
-              value={contentUrl}
-              onChange={(e) => setContentUrl(e.target.value)}
-              placeholder="https://..."
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/60 transition-colors"
-            />
-          </div>
+          {/* File Upload OR URL */}
+          {["pdf", "html_custom"].includes(resourceType) ? (
+            <div>
+              <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">
+                Fichier ({resourceType === "pdf" ? "PDF uniquement" : "HTML ou ZIP"}) *
+              </label>
+              <div
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDragging(false);
+                  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    handleFileSelect(e.dataTransfer.files[0]);
+                  }
+                }}
+                className={`relative border-2 border-dashed rounded-xl p-6 text-center transition-all ${
+                  isDragging ? "border-indigo-500 bg-indigo-500/10" : "border-slate-700 hover:border-indigo-500/50 hover:bg-slate-800/50"
+                }`}
+              >
+                <input
+                  type="file"
+                  id="file-upload"
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  accept={resourceType === "pdf" ? ".pdf" : ".html,.zip"}
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      handleFileSelect(e.target.files[0]);
+                    }
+                  }}
+                />
+                <div className="flex flex-col items-center justify-center gap-3">
+                  <div className={`p-3 rounded-full transition-colors ${file ? "bg-indigo-500/20 text-indigo-400" : "bg-slate-800 text-slate-400"}`}>
+                    <UploadCloud className="h-6 w-6" />
+                  </div>
+                  {file ? (
+                    <div>
+                      <p className="text-sm font-bold text-indigo-400 truncate max-w-[200px] mx-auto">{file.name}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-sm font-bold text-white">Cliquez ou glissez un fichier ici</p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        {resourceType === "pdf" ? "Fichiers .pdf acceptés" : "Fichiers .html ou .zip acceptés"}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">
+                URL / Chemin *
+              </label>
+              <input
+                id="resource-url"
+                type="url"
+                value={contentUrl}
+                onChange={(e) => setContentUrl(e.target.value)}
+                placeholder="https://..."
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/60 transition-colors"
+              />
+            </div>
+          )}
 
           {/* Pre-filled info */}
           <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-950/60 border border-slate-800 text-xs text-slate-500">
@@ -388,7 +485,7 @@ function CreateResourceModal({
             {submitting ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Enregistrement…
+                {["pdf", "html_custom"].includes(resourceType) && file ? "Téléversement en cours…" : "Enregistrement…"}
               </>
             ) : (
               <>
