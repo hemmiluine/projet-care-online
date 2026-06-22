@@ -6,11 +6,12 @@ import json
 import tempfile
 import os
 import re
-from typing import Optional, List
+from typing import Optional, List, Literal
 
-from sqlalchemy import create_engine, Column, Integer, String, Float
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
+from datetime import datetime
 from pydantic import BaseModel
 
 from outils import purifier_latex_integral, compiler_en_pdf, indexer_bo_fichiers
@@ -31,10 +32,33 @@ class DBClass(Base):
     average_grade = Column(Float, nullable=True)
     presence_rate = Column(Float, default=100.0)
 
+# ---------------------------------------------------------------------------
+# Resource Model
+# ---------------------------------------------------------------------------
+
+# Allowed enum values (enforced at the Pydantic level)
+SCHOOL_TYPES = Literal["college", "lycee", "lycee_pro"]
+RESOURCE_TYPES = Literal["pdf", "html_custom", "streamlit_app", "link"]
+
+class DBResource(Base):
+    """Collaborative resource shared between authenticated teachers."""
+    __tablename__ = "resources"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=False, index=True)
+    school_type = Column(String, nullable=False)   # college | lycee | lycee_pro
+    grade_level = Column(String, nullable=False)   # 6eme | 5eme | seconde | terminale …
+    resource_type = Column(String, nullable=False) # pdf | html_custom | streamlit_app | link
+    content_url = Column(String, nullable=False)
+    created_by = Column(String, nullable=False)    # email of the user who added the resource
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 # Create tables
 Base.metadata.create_all(bind=engine)
 
-# Pydantic schemas
+# ---------------------------------------------------------------------------
+# Pydantic schemas — Classes
+# ---------------------------------------------------------------------------
 class ClassBase(BaseModel):
     name: str
     description: Optional[str] = None
@@ -50,6 +74,29 @@ class ClassUpdate(ClassBase):
 
 class ClassResponse(ClassBase):
     id: int
+    class Config:
+        from_attributes = True
+
+# ---------------------------------------------------------------------------
+# Pydantic schemas — Resources
+# ---------------------------------------------------------------------------
+class ResourceBase(BaseModel):
+    title: str
+    school_type: SCHOOL_TYPES
+    grade_level: str
+    resource_type: RESOURCE_TYPES
+    content_url: str
+    created_by: str
+
+class ResourceCreate(ResourceBase):
+    pass
+
+class ResourceUpdate(ResourceBase):
+    pass
+
+class ResourceResponse(ResourceBase):
+    id: int
+    created_at: Optional[datetime] = None
     class Config:
         from_attributes = True
 
@@ -261,7 +308,9 @@ async def generate_subject(
             "detail": f"Erreur de génération : {str(e)}"
         })
 
-# CRUD Endpoints for Classes
+# ---------------------------------------------------------------------------
+# CRUD Endpoints — Classes
+# ---------------------------------------------------------------------------
 @app.get("/api/classes", response_model=List[ClassResponse])
 def read_classes(db: Session = Depends(get_db)):
     return db.query(DBClass).all()
@@ -279,10 +328,8 @@ def update_class(class_id: int, class_data: ClassUpdate, db: Session = Depends(g
     db_class = db.query(DBClass).filter(DBClass.id == class_id).first()
     if not db_class:
         raise HTTPException(status_code=404, detail="Classe introuvable")
-    
     for key, value in class_data.dict().items():
         setattr(db_class, key, value)
-        
     db.commit()
     db.refresh(db_class)
     return db_class
@@ -292,10 +339,68 @@ def delete_class(class_id: int, db: Session = Depends(get_db)):
     db_class = db.query(DBClass).filter(DBClass.id == class_id).first()
     if not db_class:
         raise HTTPException(status_code=404, detail="Classe introuvable")
-    
     db.delete(db_class)
     db.commit()
     return {"success": True, "detail": "Classe supprimée avec succès"}
+
+# ---------------------------------------------------------------------------
+# CRUD Endpoints — Resources (Hub de Ressources Collaboratif)
+# All endpoints are accessible to any authenticated user.
+# ---------------------------------------------------------------------------
+@app.get("/api/resources", response_model=List[ResourceResponse])
+def list_resources(
+    school_type: Optional[str] = None,
+    grade_level: Optional[str] = None,
+    resource_type: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    List all resources. Optional query parameters allow filtering by
+    school_type, grade_level, or resource_type.
+    """
+    query = db.query(DBResource)
+    if school_type:
+        query = query.filter(DBResource.school_type == school_type)
+    if grade_level:
+        query = query.filter(DBResource.grade_level == grade_level)
+    if resource_type:
+        query = query.filter(DBResource.resource_type == resource_type)
+    return query.order_by(DBResource.created_at.desc()).all()
+
+@app.post("/api/resources", response_model=ResourceResponse, status_code=201)
+def create_resource(resource_data: ResourceCreate, db: Session = Depends(get_db)):
+    """Create a new resource in the collaborative hub."""
+    db_resource = DBResource(**resource_data.dict())
+    db.add(db_resource)
+    db.commit()
+    db.refresh(db_resource)
+    return db_resource
+
+@app.put("/api/resources/{resource_id}", response_model=ResourceResponse)
+def update_resource(
+    resource_id: int,
+    resource_data: ResourceUpdate,
+    db: Session = Depends(get_db)
+):
+    """Update an existing resource."""
+    db_resource = db.query(DBResource).filter(DBResource.id == resource_id).first()
+    if not db_resource:
+        raise HTTPException(status_code=404, detail="Ressource introuvable")
+    for key, value in resource_data.dict().items():
+        setattr(db_resource, key, value)
+    db.commit()
+    db.refresh(db_resource)
+    return db_resource
+
+@app.delete("/api/resources/{resource_id}")
+def delete_resource(resource_id: int, db: Session = Depends(get_db)):
+    """Delete a resource from the hub."""
+    db_resource = db.query(DBResource).filter(DBResource.id == resource_id).first()
+    if not db_resource:
+        raise HTTPException(status_code=404, detail="Ressource introuvable")
+    db.delete(db_resource)
+    db.commit()
+    return {"success": True, "detail": "Ressource supprimée avec succès"}
 
 @app.on_event("startup")
 def startup_populate_db():
