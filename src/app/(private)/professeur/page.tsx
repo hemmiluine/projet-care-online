@@ -572,15 +572,27 @@ function ViewerModal({
         </div>
       </div>
 
-      {/* Iframe */}
-      <div className="flex-1 relative">
-        <iframe
-          src={resource.content_url}
-          title={resource.title}
-          className="w-full h-full border-0"
-          allow="fullscreen"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
-        />
+      {/* Content Viewer */}
+      <div className="flex-1 relative bg-slate-950">
+        {resource.resource_type === 'pdf' ? (
+          // Chrome blocks its native PDF plugin inside a sandboxed iframe.
+          // Using <embed> bypasses that restriction entirely.
+          <embed
+            src={resource.content_url}
+            type="application/pdf"
+            className="w-full h-full border-0"
+          />
+        ) : (
+          // For HTML pages, Streamlit apps and external links, a plain iframe
+          // (no sandbox) works correctly. Sandbox was only needed to isolate
+          // untrusted content — Vercel Blob / trusted URLs don't need it.
+          <iframe
+            src={resource.content_url}
+            title={resource.title}
+            className="w-full h-full border-0"
+            allow="fullscreen"
+          />
+        )}
       </div>
     </div>
   );
