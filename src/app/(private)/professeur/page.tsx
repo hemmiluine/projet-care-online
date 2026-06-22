@@ -241,6 +241,7 @@ function CreateResourceModal({
 
       // Upload file to Vercel Blob if needed
       if (needsFileUpload && file) {
+        console.log("Démarrage de l'upload du fichier vers /api/upload");
         const formData = new FormData();
         formData.append("file", file);
         const uploadRes = await fetch("/api/upload", {
@@ -248,13 +249,26 @@ function CreateResourceModal({
           body: formData,
         });
         if (!uploadRes.ok) {
-          const errData = await uploadRes.json();
-          throw new Error(errData.error || "Erreur lors du téléversement vers Vercel Blob.");
+          let errMsg = `Statut HTTP ${uploadRes.status}`;
+          try {
+            const errText = await uploadRes.text();
+            console.error("Détails échec upload :", errText);
+            try {
+              const errJson = JSON.parse(errText);
+              errMsg = errJson.error || errJson.message || errMsg;
+            } catch {
+              errMsg = `${errMsg} (Réponse brute: ${errText.substring(0, 300)})`;
+            }
+          } catch (readErr) {
+            console.error("Impossible de lire la réponse d'erreur d'upload :", readErr);
+          }
+          throw new Error(errMsg);
         }
         const blobData = await uploadRes.json();
         finalUrl = blobData.url;
       }
 
+      console.log(`Appel POST vers le backend: ${API_BASE}/api/resources`);
       const res = await fetch(`${API_BASE}/api/resources`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -269,8 +283,20 @@ function CreateResourceModal({
         }),
       });
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.detail || "Erreur lors de la création.");
+        let errMsg = `Statut HTTP ${res.status}`;
+        try {
+          const errText = await res.text();
+          console.error("Détails échec création ressource backend :", errText);
+          try {
+            const errJson = JSON.parse(errText);
+            errMsg = errJson.detail || errJson.error || errJson.message || errMsg;
+          } catch {
+            errMsg = `${errMsg} (Réponse brute: ${errText.substring(0, 300)})`;
+          }
+        } catch (readErr) {
+          console.error("Impossible de lire la réponse d'erreur du backend :", readErr);
+        }
+        throw new Error(errMsg);
       }
       onCreated();
       onClose();
@@ -598,11 +624,22 @@ export default function ResourceHubPage() {
         grade_level: gradeLevel,
         subject: subjectFilter,
       });
-      const res = await fetch(`${API_BASE}/api/resources?${params}`);
-      if (!res.ok) throw new Error(`Erreur serveur (${res.status})`);
+      const url = `${API_BASE}/api/resources?${params}`;
+      console.log("Chargement des ressources depuis :", url);
+      const res = await fetch(url);
+      if (!res.ok) {
+        let errorDetails = `Statut HTTP ${res.status}`;
+        try {
+          const rawText = await res.text();
+          console.error("Réponse d'erreur brute du serveur (fetchResources) :", rawText);
+          errorDetails += ` : ${rawText.substring(0, 200)}`;
+        } catch {}
+        throw new Error(`Erreur serveur (${errorDetails})`);
+      }
       const data: Resource[] = await res.json();
       setResources(data);
     } catch (err: unknown) {
+      console.error("Erreur lors de fetchResources :", err);
       setFetchError(
         err instanceof Error ? err.message : "Impossible de charger les ressources."
       );
@@ -619,12 +656,23 @@ export default function ResourceHubPage() {
   const handleDelete = async (id: number) => {
     if (!confirm("Supprimer cette ressource définitivement ?")) return;
     try {
-      const res = await fetch(`${API_BASE}/api/resources/${id}`, {
+      const url = `${API_BASE}/api/resources/${id}`;
+      console.log("Suppression de la ressource :", url);
+      const res = await fetch(url, {
         method: "DELETE",
       });
-      if (!res.ok) throw new Error("Erreur lors de la suppression.");
+      if (!res.ok) {
+        let errorDetails = `Statut HTTP ${res.status}`;
+        try {
+          const rawText = await res.text();
+          console.error("Réponse d'erreur brute du serveur (handleDelete) :", rawText);
+          errorDetails += ` : ${rawText.substring(0, 200)}`;
+        } catch {}
+        throw new Error(`Erreur lors de la suppression (${errorDetails})`);
+      }
       setResources((prev) => prev.filter((r) => r.id !== id));
     } catch (err: unknown) {
+      console.error("Erreur lors de handleDelete :", err);
       alert(err instanceof Error ? err.message : "Erreur inconnue.");
     }
   };

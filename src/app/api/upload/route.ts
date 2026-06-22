@@ -17,8 +17,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json(blob);
   } catch (error: unknown) {
     console.error("Vercel Blob Upload Error:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { error: "Erreur lors de l'upload. La variable BLOB_READ_WRITE_TOKEN est-elle configurée ?" },
+      { error: `Erreur lors de l'upload. Détail : ${errorMessage}` },
       { status: 500 }
     );
   }
