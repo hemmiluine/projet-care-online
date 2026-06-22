@@ -23,6 +23,7 @@ import {
 // ---------------------------------------------------------------------------
 type SchoolType = "college" | "lycee" | "lycee_pro";
 type ResourceType = "pdf" | "html_custom" | "streamlit_app" | "link";
+type SubjectType = "Mathematiques" | "Sciences Physiques" | "SNT";
 
 interface Resource {
   id: number;
@@ -30,6 +31,7 @@ interface Resource {
   school_type: SchoolType;
   grade_level: string;
   resource_type: ResourceType;
+  subject: SubjectType;
   content_url: string;
   created_by: string;
   created_at?: string;
@@ -42,6 +44,12 @@ const SCHOOL_LABELS: Record<SchoolType, string> = {
   college: "Collège",
   lycee: "Lycée",
   lycee_pro: "Lycée Pro",
+};
+
+const SUBJECT_LABELS: Record<SubjectType, string> = {
+  "Mathematiques": "Mathématiques",
+  "Sciences Physiques": "Sciences Physiques",
+  "SNT": "SNT",
 };
 
 const GRADE_LEVELS: Record<SchoolType, string[]> = {
@@ -135,11 +143,16 @@ function ResourceCard({
 
       {/* Type badge */}
       <div className="flex items-start justify-between gap-3">
-        <div
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ring-1 ${meta.bg} ${meta.color} ${meta.ring}`}
-        >
-          <Icon className="h-3 w-3" />
-          {meta.label}
+        <div className="flex flex-wrap items-center gap-2">
+          <div
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ring-1 ${meta.bg} ${meta.color} ${meta.ring}`}
+          >
+            <Icon className="h-3 w-3" />
+            {meta.label}
+          </div>
+          <span className="text-[10px] font-semibold text-slate-400 border border-slate-700 px-2 py-0.5 rounded-full">
+            {SUBJECT_LABELS[resource.subject]}
+          </span>
         </div>
         <button
           onClick={(e) => {
@@ -196,6 +209,7 @@ function CreateResourceModal({
 }) {
   const [title, setTitle] = useState("");
   const [resourceType, setResourceType] = useState<ResourceType>("pdf");
+  const [subject, setSubject] = useState<SubjectType>("Mathematiques");
   const [contentUrl, setContentUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -217,6 +231,7 @@ function CreateResourceModal({
           school_type: schoolType,
           grade_level: gradeLevel,
           resource_type: resourceType,
+          subject: subject,
           content_url: contentUrl.trim(),
           created_by: userEmail,
         }),
@@ -310,6 +325,22 @@ function CreateResourceModal({
                 }
               )}
             </div>
+          </div>
+
+          {/* Subject type */}
+          <div>
+            <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">
+              Matière *
+            </label>
+            <select
+              value={subject}
+              onChange={(e) => setSubject(e.target.value as SubjectType)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-200 focus:outline-none focus:border-indigo-500/50"
+            >
+              {(Object.entries(SUBJECT_LABELS) as [SubjectType, string][]).map(([key, label]) => (
+                <option key={key} value={key}>{label}</option>
+              ))}
+            </select>
           </div>
 
           {/* URL */}
@@ -443,6 +474,7 @@ export default function ResourceHubPage() {
   const [gradeLevel, setGradeLevel] = useState<string>(
     GRADE_LEVELS["lycee"][0]
   );
+  const [subjectFilter, setSubjectFilter] = useState<SubjectType>("Mathematiques");
 
   // --- Data state ---
   const [resources, setResources] = useState<Resource[]>([]);
@@ -467,6 +499,7 @@ export default function ResourceHubPage() {
       const params = new URLSearchParams({
         school_type: schoolType,
         grade_level: gradeLevel,
+        subject: subjectFilter,
       });
       const res = await fetch(`${API_BASE}/api/resources?${params}`);
       if (!res.ok) throw new Error(`Erreur serveur (${res.status})`);
@@ -479,7 +512,7 @@ export default function ResourceHubPage() {
     } finally {
       setLoadingData(false);
     }
-  }, [schoolType, gradeLevel]);
+  }, [schoolType, gradeLevel, subjectFilter]);
 
   useEffect(() => {
     fetchResources();
@@ -574,6 +607,30 @@ export default function ResourceHubPage() {
                   {GRADE_LABELS[grade] ?? grade}
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* Level 3 — Subject */}
+          <div>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">
+              Matière
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {(Object.entries(SUBJECT_LABELS) as [SubjectType, string][]).map(
+                ([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setSubjectFilter(key as SubjectType)}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 ${
+                      subjectFilter === key
+                        ? "bg-slate-100 text-slate-900 shadow-md"
+                        : "bg-slate-950 text-slate-400 border border-slate-800 hover:text-white hover:border-slate-700"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                )
+              )}
             </div>
           </div>
         </div>

@@ -8,7 +8,7 @@ import os
 import re
 from typing import Optional, List, Literal
 
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from datetime import datetime
@@ -39,6 +39,7 @@ class DBClass(Base):
 # Allowed enum values (enforced at the Pydantic level)
 SCHOOL_TYPES = Literal["college", "lycee", "lycee_pro"]
 RESOURCE_TYPES = Literal["pdf", "html_custom", "streamlit_app", "link"]
+SUBJECT_TYPES = Literal["Mathematiques", "Sciences Physiques", "SNT"]
 
 class DBResource(Base):
     """Collaborative resource shared between authenticated teachers."""
@@ -49,6 +50,7 @@ class DBResource(Base):
     school_type = Column(String, nullable=False)   # college | lycee | lycee_pro
     grade_level = Column(String, nullable=False)   # 6eme | 5eme | seconde | terminale …
     resource_type = Column(String, nullable=False) # pdf | html_custom | streamlit_app | link
+    subject = Column(String, nullable=False, default="Mathematiques")  # Mathematiques | Sciences Physiques | SNT
     content_url = Column(String, nullable=False)
     created_by = Column(String, nullable=False)    # email of the user who added the resource
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -85,6 +87,7 @@ class ResourceBase(BaseModel):
     school_type: SCHOOL_TYPES
     grade_level: str
     resource_type: RESOURCE_TYPES
+    subject: SUBJECT_TYPES
     content_url: str
     created_by: str
 
@@ -352,11 +355,12 @@ def list_resources(
     school_type: Optional[str] = None,
     grade_level: Optional[str] = None,
     resource_type: Optional[str] = None,
+    subject: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """
     List all resources. Optional query parameters allow filtering by
-    school_type, grade_level, or resource_type.
+    school_type, grade_level, resource_type, or subject.
     """
     query = db.query(DBResource)
     if school_type:
@@ -365,6 +369,8 @@ def list_resources(
         query = query.filter(DBResource.grade_level == grade_level)
     if resource_type:
         query = query.filter(DBResource.resource_type == resource_type)
+    if subject:
+        query = query.filter(DBResource.subject == subject)
     return query.order_by(DBResource.created_at.desc()).all()
 
 @app.post("/api/resources", response_model=ResourceResponse, status_code=201)
@@ -404,6 +410,20 @@ def delete_resource(resource_id: int, db: Session = Depends(get_db)):
 
 @app.on_event("startup")
 def startup_populate_db():
+    # ---------------------------------------------------------------------------
+    # Safe schema migration: add 'subject' column if it doesn't exist yet.
+    # This handles the upgrade from the previous schema without data loss.
+    # ---------------------------------------------------------------------------
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(
+                "ALTER TABLE resources ADD COLUMN subject VARCHAR NOT NULL DEFAULT 'Mathematiques'"
+            ))
+            conn.commit()
+    except Exception:
+        # Column already exists — nothing to do.
+        pass
+
     db = SessionLocal()
     try:
         if db.query(DBClass).count() == 0:
