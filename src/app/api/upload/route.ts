@@ -14,7 +14,6 @@ export async function POST(request: Request): Promise<NextResponse> {
       access: 'public',
       addRandomSuffix: true,
       contentType: file.type || 'application/octet-stream',
-      contentDisposition: 'inline',
     });
 
     return NextResponse.json(blob);
