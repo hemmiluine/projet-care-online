@@ -582,17 +582,21 @@ function ViewerModal({
             type="application/pdf"
             className="w-full h-full border-0"
           />
-        ) : (
-          // For HTML pages, Streamlit apps and external links, a plain iframe
-          // (no sandbox) works correctly. Sandbox was only needed to isolate
-          // untrusted content — Vercel Blob / trusted URLs don't need it.
-          <iframe
-            src={resource.content_url}
-            title={resource.title}
-            className="w-full h-full border-0"
-            allow="fullscreen"
-          />
-        )}
+        ) : (() => {
+          // Streamlit Cloud requires ?embed=true to allow embedding in an
+          // external iframe — without it, it redirects in a loop.
+          const src = resource.resource_type === 'streamlit_app'
+            ? resource.content_url + (resource.content_url.includes('?') ? '&' : '?') + 'embed=true'
+            : resource.content_url;
+          return (
+            <iframe
+              src={src}
+              title={resource.title}
+              className="w-full h-full border-0"
+              allow="fullscreen"
+            />
+          );
+        })()}
       </div>
     </div>
   );
