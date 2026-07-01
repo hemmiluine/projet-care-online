@@ -539,6 +539,17 @@ function ViewerModal({
   const meta = RESOURCE_TYPE_META[resource.resource_type];
   const Icon = meta.icon;
 
+  const [htmlContent, setHtmlContent] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (resource && resource.resource_type === "html_custom") {
+      fetch(resource.content_url)
+        .then((res) => res.text())
+        .then((text) => setHtmlContent(text))
+        .catch((err) => console.error("Error fetching custom HTML:", err));
+    }
+  }, [resource]);
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/95 backdrop-blur-md">
       {/* Top bar */}
@@ -581,6 +592,13 @@ function ViewerModal({
             src={resource.content_url}
             type="application/pdf"
             className="w-full h-full border-0"
+          />
+        ) : resource.resource_type === 'html_custom' ? (
+          <iframe
+            srcDoc={htmlContent || ''}
+            title={resource.title}
+            className="w-full h-full border-0"
+            allow="fullscreen"
           />
         ) : (() => {
           // Streamlit Cloud requires ?embed=true to allow embedding in an
